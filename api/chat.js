@@ -30,7 +30,7 @@ module.exports = async (req, res) => {
     const completion = await client.chat.completions.create({
       model: process.env.OPENAI_MODEL || "gpt-5-mini",
       temperature: 0.7,
-      max_tokens: Math.min(Number(max_tokens) || 350, 600),
+      max_completion_tokens: Math.min(Number(max_tokens) || 350, 600),
       messages
     });
 
