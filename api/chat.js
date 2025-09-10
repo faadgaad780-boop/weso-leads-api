@@ -27,12 +27,14 @@ module.exports = async (req, res) => {
       { role: "user", content: user_message }
     ];
 
-    const completion = await client.chat.completions.create({
-      model: process.env.OPENAI_MODEL || "gpt-5-mini",
-      temperature: 0.7,
-      max_completion_tokens: Math.min(Number(max_tokens) || 350, 600),
-      messages
-    });
+    const params = {
+  model: process.env.OPENAI_MODEL || "gpt-5-mini",
+  temperature: 0.7,
+  messages
+};
+params.max_completion_tokens = Math.min(Number(max_tokens) || 350, 600);
+
+const completion = await client.chat.completions.create(params);
 
     res.status(200).json({
       ok: true,
@@ -45,3 +47,4 @@ module.exports = async (req, res) => {
     res.status(500).json({ error: "server_error" });
   }
 };
+use max_completion_tokens instead of max_tokens
