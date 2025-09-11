@@ -1,6 +1,4 @@
 // api/chat.js
-const OpenAI = require("openai");
-
 module.exports = async (req, res) => {
   // فحص الطرق المدعومة
   if (req.method === "GET") {
@@ -13,18 +11,18 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // التحقق من المتغيرات الأساسية
+    // استيراد مكتبة OpenAI بصيغة متوافقة مع CommonJS
+    const { default: OpenAI } = await import("openai");
+
     if (!process.env.OPENAI_API_KEY) {
       return res.status(500).json({ error: "missing_openai_api_key" });
     }
 
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-    // بعض منصات النشر ترسل body كسلسلة نصية
+    // بعض المنصات قد ترسل body كسلسلة نصية
     const safeBody =
-      typeof req.body === "string"
-        ? (JSON.parse(req.body || "{}") || {})
-        : (req.body || {});
+      typeof req.body === "string" ? (JSON.parse(req.body || "{}") || {}) : (req.body || {});
 
     const {
       user_message,
@@ -41,7 +39,7 @@ module.exports = async (req, res) => {
 
     const model = modelFromBody || process.env.OPENAI_MODEL || "gpt-5-mini";
 
-    // الرسائل -> نص واحد لـ Responses API
+    // تجهيز الرسائل كنص واحد لـ Responses API
     const messages = [
       {
         role: "system",
@@ -55,7 +53,7 @@ module.exports = async (req, res) => {
 
     const input = messages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join("\n");
 
-    // ملاحظة: Responses API تستخدم max_completion_tokens (وليس max_tokens)
+    // استخدام Responses API + max_completion_tokens (وليس max_tokens)
     const response = await client.responses.create({
       model,
       input,
@@ -63,9 +61,13 @@ module.exports = async (req, res) => {
       temperature: Number.isFinite(temperature) ? temperature : 0.7
     });
 
+    // استخراج النص بأكثر من احتمال
     const text =
       response.output_text ||
       response?.content?.[0]?.text ||
+      (Array.isArray(response?.output)
+        ? (response.output[0]?.content?.[0]?.text?.value || "")
+        : "") ||
       "";
 
     res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -75,14 +77,10 @@ module.exports = async (req, res) => {
     });
 
   } catch (err) {
-    // لوج واضح + أكواد مناسبة
     console.error("chat_error", err?.response?.data || err);
-
     const status = err?.status || err?.response?.status;
-
     if (status === 429) return res.status(429).json({ error: "rate_limited" });
     if (status === 401) return res.status(401).json({ error: "invalid_api_key" });
-
     return res.status(500).json({ error: "server_error" });
   }
 };
