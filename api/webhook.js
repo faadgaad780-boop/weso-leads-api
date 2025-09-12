@@ -1,18 +1,18 @@
 export default function handler(req, res) {
   if (req.method === "GET") {
-    const mode = req.query['hub.mode'];
-    const token = req.query['hub.verify_token'];
-    const challenge = req.query['hub.challenge'];
+    const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 
-    if (mode && token && mode === 'subscribe' && token === "Wesam-Verify-2025") {
+    const mode = req.query["hub.mode"];
+    const token = req.query["hub.verify_token"];
+    const challenge = req.query["hub.challenge"];
+
+    if (mode && token === VERIFY_TOKEN) {
       res.status(200).send(challenge);
     } else {
       res.sendStatus(403);
     }
-  }
-
-  if (req.method === "POST") {
-    console.log("Webhook received:", req.body);
+  } else if (req.method === "POST") {
+    console.log("Webhook event:", req.body);
     res.sendStatus(200);
   }
 }
