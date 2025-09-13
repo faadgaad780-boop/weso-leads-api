@@ -1,18 +1,22 @@
 // api/chat.js
 module.exports = async (req, res) => {
-  // فحص الطرق المدعومة
+  // السماح لـ GET لاختبار صحة المسار
   if (req.method === "GET") {
     res.setHeader("Content-Type", "application/json; charset=utf-8");
-    return res.status(200).json({ ok: true, route: "/api/chat", method: "GET" });
+    return res
+      .status(200)
+      .json({ ok: true, route: "/api/chat", method: "GET" });
   }
+
+  // السماح فقط بـ POST للرسائل
   if (req.method !== "POST") {
     res.setHeader("Allow", "GET, POST");
     return res.status(405).json({ error: "method_not_allowed" });
   }
 
   try {
-    // استيراد مكتبة OpenAI بصيغة متوافقة مع CommonJS
-    const { default: OpenAI } = await import("openai");
+    // استيراد مكتبة OpenAI (متوافق مع CommonJS في Vercel/Node)
+    const OpenAI = (await import("openai")).default;
 
     if (!process.env.OPENAI_API_KEY) {
       return res.status(500).json({ error: "missing_openai_api_key" });
@@ -20,13 +24,15 @@ module.exports = async (req, res) => {
 
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-    // بعض المنصات قد ترسل body كسلسلة نصية
+    // بعض المنصات ترسل body كسلسلة نصية
     const safeBody =
-      typeof req.body === "string" ? (JSON.parse(req.body || "{}") || {}) : (req.body || {});
+      typeof req.body === "string"
+        ? (JSON.parse(req.body || "{}") || {})
+        : (req.body || {});
 
     const {
       user_message,
-      history = [],
+      history = [],            // [{role:"user"|"assistant"|"system", content:"..."}]
       system,
       max_tokens = 350,
       temperature = 0.7,
@@ -37,45 +43,37 @@ module.exports = async (req, res) => {
       return res.status(400).json({ error: "user_message_required" });
     }
 
-    const model = modelFromBody || process.env.OPENAI_MODEL || "gpt-5-mini";
+    // موديل افتراضي مدعوم وخفيف للتكلفة
+    const model = modelFromBody || process.env.OPENAI_MODEL || "gpt-4o-mini";
 
-    // تجهيز الرسائل كنص واحد لـ Responses API
+    // تحضير الرسائل لـ Chat Completions API
     const messages = [
       {
         role: "system",
         content:
           system ||
-          "أنت مساعد لمؤسسة Wesam Abdullah (تصميم وتسويق). ردودك مختصرة (3-5 جمل)، عملية، وتهدف لإغلاق الصفقة بسرعة."
+          "أنت مساعد لمؤسسة Wesam Abdullah (تصميم وتسويق). اجعل الردود مختصرة (3-5 جمل)، عملية، وتدفع العميل لاتخاذ خطوة."
       },
       ...(Array.isArray(history) ? history.filter(m => m?.role && m?.content) : []),
       { role: "user", content: user_message }
     ];
 
-    const input = messages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join("\n");
-
-    // استخدام Responses API + max_completion_tokens (وليس max_tokens)
-    const response = await client.responses.create({
+    // الاتصال بالـ API (Chat Completions)
+    const completion = await client.chat.completions.create({
       model,
-      input,
-      max_completion_tokens: Math.min(Number(max_tokens) || 350, 600),
+      messages,
+      max_tokens: Math.min(Number(max_tokens) || 350, 1200),
       temperature: Number.isFinite(temperature) ? temperature : 0.7
     });
 
-    // استخراج النص بأكثر من احتمال
     const text =
-      response.output_text ||
-      response?.content?.[0]?.text ||
-      (Array.isArray(response?.output)
-        ? (response.output[0]?.content?.[0]?.text?.value || "")
-        : "") ||
-      "";
+      completion?.choices?.[0]?.message?.content?.trim() || "";
 
     res.setHeader("Content-Type", "application/json; charset=utf-8");
     return res.status(200).json({
       ok: true,
       message: { role: "assistant", content: text }
     });
-
   } catch (err) {
     console.error("chat_error", err?.response?.data || err);
     const status = err?.status || err?.response?.status;
